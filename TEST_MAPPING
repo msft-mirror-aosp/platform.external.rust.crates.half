@@ -28,6 +28,12 @@
       "name": "diced_vendor_test"
     },
     {
+      "name": "keystore2_client_tests"
+    },
+    {
+      "name": "keystore2_legacy_blobs_test"
+    },
+    {
       "name": "keystore2_test"
     },
     {
@@ -49,6 +55,12 @@
     },
     {
       "name": "diced_vendor_test"
+    },
+    {
+      "name": "keystore2_client_tests"
+    },
+    {
+      "name": "keystore2_legacy_blobs_test"
     },
     {
       "name": "keystore2_test"
