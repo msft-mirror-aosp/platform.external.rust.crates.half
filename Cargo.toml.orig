@@ -1,7 +1,7 @@
 [package]
 name = "half"
 # Remember to keep in sync with html_root_url crate attribute
-version = "2.1.0"
+version = "2.2.1"
 authors = ["Kathryn Long <squeeself@gmail.com>"]
 description = "Half-precision floating point f16 and bf16 types for Rust implementing the IEEE 754-2008 standard binary16 and bfloat16 types."
 repository = "https://github.com/starkat99/half-rs"
@@ -33,7 +33,7 @@ zerocopy = { version = "0.6.0", default-features = false, optional = true }
 crunchy = "0.2.2"
 
 [dev-dependencies]
-criterion = "0.3.5"
+criterion = "0.4.0"
 quickcheck = "1.0"
 quickcheck_macros = "1.0"
 rand = "0.8.4"
