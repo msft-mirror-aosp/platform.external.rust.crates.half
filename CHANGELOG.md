@@ -5,6 +5,23 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [2.2.1] - 2023-01-08 <a name="2.2.1"></a>
+### Changed
+- Reduced unnecessary bounds checks for SIMD operations on slices. By [@Shnatsel].
+- Further slice conversion optimizations for slices. Resolves [#66].
+
+## [2.2.0] - 2022-12-30 <a name="2.2.0"></a>
+### Added
+- Add `serialize_as_f32` and `serialize_as_string` functions when `serde` cargo feature is enabled.
+  They allowing customizing the serialization by using 
+  `#[serde(serialize_with="f16::serialize_as_f32")]` attribute in serde derive macros. Closes [#60].
+- Deserialize now supports deserializing from `f32`, `f64`, and string values in addition to its
+  previous default deserialization. Closes [#60].
+
+### Changed
+- Add `#[inline]` on fallback functions, which improved conversion execution on non-nightly rust 
+  by up to 50%. By [@Shnatsel].
+
 ## [2.1.0] - 2022-07-18 <a name="2.1.0"></a>
 ### Added
 - Add support for target_arch `spirv`. Some traits and functions are unavailble on this
@@ -257,6 +274,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 [#37]: https://github.com/starkat99/half-rs/issues/37
 [#48]: https://github.com/starkat99/half-rs/issues/48
 [#55]: https://github.com/starkat99/half-rs/issues/55
+[#60]: https://github.com/starkat99/half-rs/issues/60
+[#66]: https://github.com/starkat99/half-rs/issues/66
 
 [@tspiteri]: https://github.com/tspiteri
 [@PSeitz]: https://github.com/PSeitz
@@ -271,9 +290,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 [@kali]: https://github.com/kali
 [@Nilstrieb]: https://github.com/Nilstrieb
 [@joseluis]: https://github.com/joseluis
+[@Shnatsel]: https://github.com/Shnatsel
 
 
-[Unreleased]: https://github.com/starkat99/half-rs/compare/v2.1.0...HEAD
+[Unreleased]: https://github.com/starkat99/half-rs/compare/v2.2.1...HEAD
+[2.2.1]: https://github.com/starkat99/half-rs/compare/v2.2.0...v2.2.1
+[2.2.0]: https://github.com/starkat99/half-rs/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/starkat99/half-rs/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/starkat99/half-rs/compare/v1.8.2...v2.0.0
 [1.8.2]: https://github.com/starkat99/half-rs/compare/v1.8.1...v1.8.2
