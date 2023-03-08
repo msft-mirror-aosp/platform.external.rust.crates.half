@@ -3,11 +3,11 @@ use crate::leading_zeros::leading_zeros_u16;
 use core::mem;
 
 macro_rules! convert_fn {
-    (fn $name:ident($var:ident : $vartype:ty) -> $restype:ty {
+    (fn $name:ident($($var:ident : $vartype:ty),+) -> $restype:ty {
             if feature("f16c") { $f16c:expr }
             else { $fallback:expr }}) => {
         #[inline]
-        pub(crate) fn $name($var: $vartype) -> $restype {
+        pub(crate) fn $name($($var: $vartype),+) -> $restype {
             // Use CPU feature detection if using std
             #[cfg(all(
                 feature = "use-intrinsics",
@@ -84,11 +84,8 @@ convert_fn! {
     }
 }
 
-// TODO: While SIMD versions are faster, further improvements can be made by doing runtime feature
-// detection once at beginning of convert slice method, rather than per chunk
-
 convert_fn! {
-    fn f32x4_to_f16x4(f: &[f32]) -> [u16; 4] {
+    fn f32x4_to_f16x4(f: &[f32; 4]) -> [u16; 4] {
         if feature("f16c") {
             unsafe { x86::f32x4_to_f16x4_x86_f16c(f) }
         } else {
@@ -98,7 +95,7 @@ convert_fn! {
 }
 
 convert_fn! {
-    fn f16x4_to_f32x4(i: &[u16]) -> [f32; 4] {
+    fn f16x4_to_f32x4(i: &[u16; 4]) -> [f32; 4] {
         if feature("f16c") {
             unsafe { x86::f16x4_to_f32x4_x86_f16c(i) }
         } else {
@@ -108,7 +105,7 @@ convert_fn! {
 }
 
 convert_fn! {
-    fn f64x4_to_f16x4(f: &[f64]) -> [u16; 4] {
+    fn f64x4_to_f16x4(f: &[f64; 4]) -> [u16; 4] {
         if feature("f16c") {
             unsafe { x86::f64x4_to_f16x4_x86_f16c(f) }
         } else {
@@ -118,12 +115,161 @@ convert_fn! {
 }
 
 convert_fn! {
-    fn f16x4_to_f64x4(i: &[u16]) -> [f64; 4] {
+    fn f16x4_to_f64x4(i: &[u16; 4]) -> [f64; 4] {
         if feature("f16c") {
             unsafe { x86::f16x4_to_f64x4_x86_f16c(i) }
         } else {
             f16x4_to_f64x4_fallback(i)
         }
+    }
+}
+
+convert_fn! {
+    fn f32x8_to_f16x8(f: &[f32; 8]) -> [u16; 8] {
+        if feature("f16c") {
+            unsafe { x86::f32x8_to_f16x8_x86_f16c(f) }
+        } else {
+            f32x8_to_f16x8_fallback(f)
+        }
+    }
+}
+
+convert_fn! {
+    fn f16x8_to_f32x8(i: &[u16; 8]) -> [f32; 8] {
+        if feature("f16c") {
+            unsafe { x86::f16x8_to_f32x8_x86_f16c(i) }
+        } else {
+            f16x8_to_f32x8_fallback(i)
+        }
+    }
+}
+
+convert_fn! {
+    fn f64x8_to_f16x8(f: &[f64; 8]) -> [u16; 8] {
+        if feature("f16c") {
+            unsafe { x86::f64x8_to_f16x8_x86_f16c(f) }
+        } else {
+            f64x8_to_f16x8_fallback(f)
+        }
+    }
+}
+
+convert_fn! {
+    fn f16x8_to_f64x8(i: &[u16; 8]) -> [f64; 8] {
+        if feature("f16c") {
+            unsafe { x86::f16x8_to_f64x8_x86_f16c(i) }
+        } else {
+            f16x8_to_f64x8_fallback(i)
+        }
+    }
+}
+
+convert_fn! {
+    fn f32_to_f16_slice(src: &[f32], dst: &mut [u16]) -> () {
+        if feature("f16c") {
+            convert_chunked_slice_8(src, dst, x86::f32x8_to_f16x8_x86_f16c,
+                x86::f32x4_to_f16x4_x86_f16c)
+        } else {
+            slice_fallback(src, dst, f32_to_f16_fallback)
+        }
+    }
+}
+
+convert_fn! {
+    fn f16_to_f32_slice(src: &[u16], dst: &mut [f32]) -> () {
+        if feature("f16c") {
+            convert_chunked_slice_8(src, dst, x86::f16x8_to_f32x8_x86_f16c,
+                x86::f16x4_to_f32x4_x86_f16c)
+        } else {
+            slice_fallback(src, dst, f16_to_f32_fallback)
+        }
+    }
+}
+
+convert_fn! {
+    fn f64_to_f16_slice(src: &[f64], dst: &mut [u16]) -> () {
+        if feature("f16c") {
+            convert_chunked_slice_8(src, dst, x86::f64x8_to_f16x8_x86_f16c,
+                x86::f64x4_to_f16x4_x86_f16c)
+        } else {
+            slice_fallback(src, dst, f64_to_f16_fallback)
+        }
+    }
+}
+
+convert_fn! {
+    fn f16_to_f64_slice(src: &[u16], dst: &mut [f64]) -> () {
+        if feature("f16c") {
+            convert_chunked_slice_8(src, dst, x86::f16x8_to_f64x8_x86_f16c,
+                x86::f16x4_to_f64x4_x86_f16c)
+        } else {
+            slice_fallback(src, dst, f16_to_f64_fallback)
+        }
+    }
+}
+
+/// Chunks sliced into x8 or x4 arrays
+#[inline]
+fn convert_chunked_slice_8<S: Copy + Default, D: Copy>(
+    src: &[S],
+    dst: &mut [D],
+    fn8: unsafe fn(&[S; 8]) -> [D; 8],
+    fn4: unsafe fn(&[S; 4]) -> [D; 4],
+) {
+    assert_eq!(src.len(), dst.len());
+
+    // TODO: Can be further optimized with array_chunks when it becomes stabilized
+
+    let src_chunks = src.chunks_exact(8);
+    let mut dst_chunks = dst.chunks_exact_mut(8);
+    let src_remainder = src_chunks.remainder();
+    for (s, d) in src_chunks.zip(&mut dst_chunks) {
+        let chunk: &[S; 8] = s.try_into().unwrap();
+        d.copy_from_slice(unsafe { &fn8(chunk) });
+    }
+
+    // Process remainder
+    if src_remainder.len() > 4 {
+        let mut buf: [S; 8] = Default::default();
+        buf[..src_remainder.len()].copy_from_slice(src_remainder);
+        let vec = unsafe { fn8(&buf) };
+        let dst_remainder = dst_chunks.into_remainder();
+        dst_remainder.copy_from_slice(&vec[..dst_remainder.len()]);
+    } else if !src_remainder.is_empty() {
+        let mut buf: [S; 4] = Default::default();
+        buf[..src_remainder.len()].copy_from_slice(src_remainder);
+        let vec = unsafe { fn4(&buf) };
+        let dst_remainder = dst_chunks.into_remainder();
+        dst_remainder.copy_from_slice(&vec[..dst_remainder.len()]);
+    }
+}
+
+/// Chunks sliced into x4 arrays
+#[inline]
+fn convert_chunked_slice_4<S: Copy + Default, D: Copy>(
+    src: &[S],
+    dst: &mut [D],
+    f: unsafe fn(&[S; 4]) -> [D; 4],
+) {
+    assert_eq!(src.len(), dst.len());
+
+    // TODO: Can be further optimized with array_chunks when it becomes stabilized
+
+    let src_chunks = src.chunks_exact(4);
+    let mut dst_chunks = dst.chunks_exact_mut(4);
+    let src_remainder = src_chunks.remainder();
+    for (s, d) in src_chunks.zip(&mut dst_chunks) {
+        let chunk: &[S; 4] = s.try_into().unwrap();
+        d.copy_from_slice(unsafe { &f(chunk) });
+    }
+
+    // Process remainder
+    if !src_remainder.is_empty() {
+        let mut buf: [S; 4] = Default::default();
+        buf[..src_remainder.len()].copy_from_slice(src_remainder);
+        let vec = unsafe { f(&buf) };
+        let dst_remainder = dst_chunks.into_remainder();
+        dst_remainder.copy_from_slice(&vec[..dst_remainder.len()]);
     }
 }
 
@@ -143,6 +289,7 @@ convert_fn! {
 // which can be simplified into
 //     (mantissa & round_bit) != 0 && (mantissa & (3 * round_bit - 1)) != 0
 
+#[inline]
 pub(crate) const fn f32_to_f16_fallback(value: f32) -> u16 {
     // TODO: Replace mem::transmute with to_bits() once to_bits is const-stabilized
     // Convert to raw bytes
@@ -203,6 +350,7 @@ pub(crate) const fn f32_to_f16_fallback(value: f32) -> u16 {
     }
 }
 
+#[inline]
 pub(crate) const fn f64_to_f16_fallback(value: f64) -> u16 {
     // Convert to raw bytes, truncating the last 32-bits of mantissa; that precision will always
     // be lost on half-precision.
@@ -270,6 +418,7 @@ pub(crate) const fn f64_to_f16_fallback(value: f64) -> u16 {
     }
 }
 
+#[inline]
 pub(crate) const fn f16_to_f32_fallback(i: u16) -> f32 {
     // Check for signed zero
     // TODO: Replace mem::transmute with from_bits() once from_bits is const-stabilized
@@ -316,6 +465,7 @@ pub(crate) const fn f16_to_f32_fallback(i: u16) -> f32 {
     unsafe { mem::transmute(sign | exp | man) }
 }
 
+#[inline]
 pub(crate) const fn f16_to_f64_fallback(i: u16) -> f64 {
     // Check for signed zero
     // TODO: Replace mem::transmute with from_bits() once from_bits is const-stabilized
@@ -363,9 +513,7 @@ pub(crate) const fn f16_to_f64_fallback(i: u16) -> f64 {
 }
 
 #[inline]
-fn f16x4_to_f32x4_fallback(v: &[u16]) -> [f32; 4] {
-    debug_assert!(v.len() >= 4);
-
+fn f16x4_to_f32x4_fallback(v: &[u16; 4]) -> [f32; 4] {
     [
         f16_to_f32_fallback(v[0]),
         f16_to_f32_fallback(v[1]),
@@ -375,9 +523,7 @@ fn f16x4_to_f32x4_fallback(v: &[u16]) -> [f32; 4] {
 }
 
 #[inline]
-fn f32x4_to_f16x4_fallback(v: &[f32]) -> [u16; 4] {
-    debug_assert!(v.len() >= 4);
-
+fn f32x4_to_f16x4_fallback(v: &[f32; 4]) -> [u16; 4] {
     [
         f32_to_f16_fallback(v[0]),
         f32_to_f16_fallback(v[1]),
@@ -387,9 +533,7 @@ fn f32x4_to_f16x4_fallback(v: &[f32]) -> [u16; 4] {
 }
 
 #[inline]
-fn f16x4_to_f64x4_fallback(v: &[u16]) -> [f64; 4] {
-    debug_assert!(v.len() >= 4);
-
+fn f16x4_to_f64x4_fallback(v: &[u16; 4]) -> [f64; 4] {
     [
         f16_to_f64_fallback(v[0]),
         f16_to_f64_fallback(v[1]),
@@ -399,15 +543,77 @@ fn f16x4_to_f64x4_fallback(v: &[u16]) -> [f64; 4] {
 }
 
 #[inline]
-fn f64x4_to_f16x4_fallback(v: &[f64]) -> [u16; 4] {
-    debug_assert!(v.len() >= 4);
-
+fn f64x4_to_f16x4_fallback(v: &[f64; 4]) -> [u16; 4] {
     [
         f64_to_f16_fallback(v[0]),
         f64_to_f16_fallback(v[1]),
         f64_to_f16_fallback(v[2]),
         f64_to_f16_fallback(v[3]),
     ]
+}
+
+#[inline]
+fn f16x8_to_f32x8_fallback(v: &[u16; 8]) -> [f32; 8] {
+    [
+        f16_to_f32_fallback(v[0]),
+        f16_to_f32_fallback(v[1]),
+        f16_to_f32_fallback(v[2]),
+        f16_to_f32_fallback(v[3]),
+        f16_to_f32_fallback(v[4]),
+        f16_to_f32_fallback(v[5]),
+        f16_to_f32_fallback(v[6]),
+        f16_to_f32_fallback(v[7]),
+    ]
+}
+
+#[inline]
+fn f32x8_to_f16x8_fallback(v: &[f32; 8]) -> [u16; 8] {
+    [
+        f32_to_f16_fallback(v[0]),
+        f32_to_f16_fallback(v[1]),
+        f32_to_f16_fallback(v[2]),
+        f32_to_f16_fallback(v[3]),
+        f32_to_f16_fallback(v[4]),
+        f32_to_f16_fallback(v[5]),
+        f32_to_f16_fallback(v[6]),
+        f32_to_f16_fallback(v[7]),
+    ]
+}
+
+#[inline]
+fn f16x8_to_f64x8_fallback(v: &[u16; 8]) -> [f64; 8] {
+    [
+        f16_to_f64_fallback(v[0]),
+        f16_to_f64_fallback(v[1]),
+        f16_to_f64_fallback(v[2]),
+        f16_to_f64_fallback(v[3]),
+        f16_to_f64_fallback(v[4]),
+        f16_to_f64_fallback(v[5]),
+        f16_to_f64_fallback(v[6]),
+        f16_to_f64_fallback(v[7]),
+    ]
+}
+
+#[inline]
+fn f64x8_to_f16x8_fallback(v: &[f64; 8]) -> [u16; 8] {
+    [
+        f64_to_f16_fallback(v[0]),
+        f64_to_f16_fallback(v[1]),
+        f64_to_f16_fallback(v[2]),
+        f64_to_f16_fallback(v[3]),
+        f64_to_f16_fallback(v[4]),
+        f64_to_f16_fallback(v[5]),
+        f64_to_f16_fallback(v[6]),
+        f64_to_f16_fallback(v[7]),
+    ]
+}
+
+#[inline]
+fn slice_fallback<S: Copy, D>(src: &[S], dst: &mut [D], f: fn(S) -> D) {
+    assert_eq!(src.len(), dst.len());
+    for (s, d) in src.iter().copied().zip(dst.iter_mut()) {
+        *d = f(s);
+    }
 }
 
 /////////////// x86/x86_64 f16c ////////////////
@@ -419,11 +625,17 @@ mod x86 {
     use core::{mem::MaybeUninit, ptr};
 
     #[cfg(target_arch = "x86")]
-    use core::arch::x86::{__m128, __m128i, _mm_cvtph_ps, _mm_cvtps_ph, _MM_FROUND_TO_NEAREST_INT};
+    use core::arch::x86::{
+        __m128, __m128i, __m256, _mm256_cvtph_ps, _mm256_cvtps_ph, _mm_cvtph_ps,
+        _MM_FROUND_TO_NEAREST_INT,
+    };
     #[cfg(target_arch = "x86_64")]
     use core::arch::x86_64::{
-        __m128, __m128i, _mm_cvtph_ps, _mm_cvtps_ph, _MM_FROUND_TO_NEAREST_INT,
+        __m128, __m128i, __m256, _mm256_cvtph_ps, _mm256_cvtps_ph, _mm_cvtph_ps, _mm_cvtps_ph,
+        _MM_FROUND_TO_NEAREST_INT,
     };
+
+    use super::convert_chunked_slice_8;
 
     #[target_feature(enable = "f16c")]
     #[inline]
@@ -445,9 +657,7 @@ mod x86 {
 
     #[target_feature(enable = "f16c")]
     #[inline]
-    pub(super) unsafe fn f16x4_to_f32x4_x86_f16c(v: &[u16]) -> [f32; 4] {
-        debug_assert!(v.len() >= 4);
-
+    pub(super) unsafe fn f16x4_to_f32x4_x86_f16c(v: &[u16; 4]) -> [f32; 4] {
         let mut vec = MaybeUninit::<__m128i>::zeroed();
         ptr::copy_nonoverlapping(v.as_ptr(), vec.as_mut_ptr().cast(), 4);
         let retval = _mm_cvtph_ps(vec.assume_init());
@@ -456,9 +666,7 @@ mod x86 {
 
     #[target_feature(enable = "f16c")]
     #[inline]
-    pub(super) unsafe fn f32x4_to_f16x4_x86_f16c(v: &[f32]) -> [u16; 4] {
-        debug_assert!(v.len() >= 4);
-
+    pub(super) unsafe fn f32x4_to_f16x4_x86_f16c(v: &[f32; 4]) -> [u16; 4] {
         let mut vec = MaybeUninit::<__m128>::uninit();
         ptr::copy_nonoverlapping(v.as_ptr(), vec.as_mut_ptr().cast(), 4);
         let retval = _mm_cvtps_ph(vec.assume_init(), _MM_FROUND_TO_NEAREST_INT);
@@ -467,13 +675,8 @@ mod x86 {
 
     #[target_feature(enable = "f16c")]
     #[inline]
-    pub(super) unsafe fn f16x4_to_f64x4_x86_f16c(v: &[u16]) -> [f64; 4] {
-        debug_assert!(v.len() >= 4);
-
-        let mut vec = MaybeUninit::<__m128i>::zeroed();
-        ptr::copy_nonoverlapping(v.as_ptr(), vec.as_mut_ptr().cast(), 4);
-        let retval = _mm_cvtph_ps(vec.assume_init());
-        let array = *(&retval as *const __m128).cast::<[f32; 4]>();
+    pub(super) unsafe fn f16x4_to_f64x4_x86_f16c(v: &[u16; 4]) -> [f64; 4] {
+        let array = f16x4_to_f32x4_x86_f16c(v);
         // Let compiler vectorize this regular cast for now.
         // TODO: investigate auto-detecting sse2/avx convert features
         [
@@ -486,16 +689,64 @@ mod x86 {
 
     #[target_feature(enable = "f16c")]
     #[inline]
-    pub(super) unsafe fn f64x4_to_f16x4_x86_f16c(v: &[f64]) -> [u16; 4] {
-        debug_assert!(v.len() >= 4);
-
+    pub(super) unsafe fn f64x4_to_f16x4_x86_f16c(v: &[f64; 4]) -> [u16; 4] {
         // Let compiler vectorize this regular cast for now.
         // TODO: investigate auto-detecting sse2/avx convert features
         let v = [v[0] as f32, v[1] as f32, v[2] as f32, v[3] as f32];
+        f32x4_to_f16x4_x86_f16c(&v)
+    }
 
-        let mut vec = MaybeUninit::<__m128>::uninit();
-        ptr::copy_nonoverlapping(v.as_ptr(), vec.as_mut_ptr().cast(), 4);
-        let retval = _mm_cvtps_ph(vec.assume_init(), _MM_FROUND_TO_NEAREST_INT);
+    #[target_feature(enable = "f16c")]
+    #[inline]
+    pub(super) unsafe fn f16x8_to_f32x8_x86_f16c(v: &[u16; 8]) -> [f32; 8] {
+        let mut vec = MaybeUninit::<__m128i>::zeroed();
+        ptr::copy_nonoverlapping(v.as_ptr(), vec.as_mut_ptr().cast(), 8);
+        let retval = _mm256_cvtph_ps(vec.assume_init());
+        *(&retval as *const __m256).cast()
+    }
+
+    #[target_feature(enable = "f16c")]
+    #[inline]
+    pub(super) unsafe fn f32x8_to_f16x8_x86_f16c(v: &[f32; 8]) -> [u16; 8] {
+        let mut vec = MaybeUninit::<__m256>::uninit();
+        ptr::copy_nonoverlapping(v.as_ptr(), vec.as_mut_ptr().cast(), 8);
+        let retval = _mm256_cvtps_ph(vec.assume_init(), _MM_FROUND_TO_NEAREST_INT);
         *(&retval as *const __m128i).cast()
+    }
+
+    #[target_feature(enable = "f16c")]
+    #[inline]
+    pub(super) unsafe fn f16x8_to_f64x8_x86_f16c(v: &[u16; 8]) -> [f64; 8] {
+        let array = f16x8_to_f32x8_x86_f16c(v);
+        // Let compiler vectorize this regular cast for now.
+        // TODO: investigate auto-detecting sse2/avx convert features
+        [
+            array[0] as f64,
+            array[1] as f64,
+            array[2] as f64,
+            array[3] as f64,
+            array[4] as f64,
+            array[5] as f64,
+            array[6] as f64,
+            array[7] as f64,
+        ]
+    }
+
+    #[target_feature(enable = "f16c")]
+    #[inline]
+    pub(super) unsafe fn f64x8_to_f16x8_x86_f16c(v: &[f64; 8]) -> [u16; 8] {
+        // Let compiler vectorize this regular cast for now.
+        // TODO: investigate auto-detecting sse2/avx convert features
+        let v = [
+            v[0] as f32,
+            v[1] as f32,
+            v[2] as f32,
+            v[3] as f32,
+            v[4] as f32,
+            v[5] as f32,
+            v[6] as f32,
+            v[7] as f32,
+        ];
+        f32x8_to_f16x8_x86_f16c(&v)
     }
 }
