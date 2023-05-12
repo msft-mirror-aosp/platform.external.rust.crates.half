@@ -1,6 +1,16 @@
 {
-  "add-toplevel-block": "cargo2android_nostd.bp",
   "device": true,
   "run": true,
-  "vendor-available": true
+  "variants": [
+    {
+    },
+    {
+      "alloc": true,
+      "features": "alloc",
+      "force-rlib": true,
+      "no-host": true,
+      "suffix": "_nostd",
+      "no-std": true
+    }
+  ]
 }
