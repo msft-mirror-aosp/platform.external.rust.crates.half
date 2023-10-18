@@ -7,7 +7,7 @@ MODULE_CRATE_NAME := half
 MODULE_SRCS := \
 	$(LOCAL_DIR)/src/lib.rs \
 
-MODULE_RUST_EDITION := 2018
+MODULE_RUST_EDITION := 2021
 MODULE_LIBRARY_DEPS := \
 	external/rust/crates/serde \
 
